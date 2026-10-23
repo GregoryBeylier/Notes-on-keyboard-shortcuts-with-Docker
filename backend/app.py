@@ -33,6 +33,21 @@ def validate_metadata(data):
     return result
 
 
+def read_content(data):
+    content = data.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise InvalidShortcut("Le contenu Markdown est obligatoire.")
+    return content.strip()
+
+
+def slugify(title):
+    title_ascii = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9]+", "-", title_ascii.lower()).strip("-")
+    if not slug:
+        raise InvalidShortcut("Le titre doit contenir au moins une lettre latine ou un chiffre.")
+    return slug
+
+
 def shortcut_path(slug):
     if not SLUG_PATTERN.fullmatch(slug):
         return None
@@ -92,21 +107,43 @@ def get_shortcut(slug):
 def create_shortcut():
     data = request.get_json()
     metadata = validate_metadata(data)
-    content = data.get("content")
-    if not isinstance(content, str) or not content.strip():
-        raise InvalidShortcut("Le contenu Markdown est obligatoire.")
-    title_ascii = unicodedata.normalize("NFKD", metadata["title"]).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-z0-9]+", "-", title_ascii.lower()).strip("-")
-    if not slug:
-        raise InvalidShortcut("Le titre doit contenir au moins une lettre latine ou un chiffre.")
+    content = read_content(data)
+    slug = slugify(metadata["title"])
     path = shortcut_path(slug)
     if path is None:
         return jsonify(error="Ce nom de fichier est indisponible."), 409
-    post = frontmatter.Post(content.strip(), **metadata)
+    post = frontmatter.Post(content, **metadata)
     # Le mode x empêche d'écraser une fiche, y compris en cas de créations simultanées.
     try:
         with path.open("x", encoding="utf-8") as handle:
             handle.write(frontmatter.dumps(post) + "\n")
     except FileExistsError:
         return jsonify(error="Une fiche porte déjà ce titre. Choisissez un autre titre."), 409
-    return jsonify({"slug": slug, **metadata, "content": content.strip()}), 201
+    return jsonify({"slug": slug, **metadata, "content": content}), 201
+
+
+@app.put("/api/shortcuts/<slug>")
+def update_shortcut(slug):
+    old_path = shortcut_path(slug)
+    if old_path is None or not old_path.is_file():
+        return jsonify(error="Raccourci introuvable."), 404
+    data = request.get_json()
+    metadata = validate_metadata(data)
+    content = read_content(data)
+    # Si le titre change, le nom du fichier change aussi.
+    new_slug = slugify(metadata["title"])
+    new_path = shortcut_path(new_slug)
+    if new_path is None:
+        return jsonify(error="Ce nom de fichier est indisponible."), 409
+    text = frontmatter.dumps(frontmatter.Post(content, **metadata)) + "\n"
+    if new_slug == slug:
+        old_path.write_text(text, encoding="utf-8")
+    else:
+        # Le mode x refuse d'écraser une autre fiche qui porte déjà ce nouveau titre.
+        try:
+            with new_path.open("x", encoding="utf-8") as handle:
+                handle.write(text)
+        except FileExistsError:
+            return jsonify(error="Une fiche porte déjà ce titre. Choisissez un autre titre."), 409
+        old_path.unlink()
+    return jsonify({"slug": new_slug, **metadata, "content": content})

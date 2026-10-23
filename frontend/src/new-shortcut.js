@@ -26,7 +26,6 @@ export function showForm(app, shortcut = null) {
   const keysInput = form.querySelector('input[name="keys"]');
   const labelIdle = isEdit ? 'Enregistrer les modifications →' : 'Créer le fichier Markdown →';
 
-  keysInput.readOnly = true; // empêche la saisie au clavier classique
   keysInput.addEventListener('keydown', (event) => {
     // Ctrl+S enregistre quand même le formulaire
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
@@ -35,28 +34,19 @@ export function showForm(app, shortcut = null) {
       return;
     }
 
-    // Laisse Tab passer pour sortir du champ
-    if (event.key === 'Tab') return;
+    // Saisie normale : lettres, chiffres, Backspace, flèches... restent gérés par le champ
+    if (!(event.ctrlKey || event.altKey || event.metaKey)) return;
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) return;
+
+    // Combinaison avec modificateur : on la capture et on l'affiche
     event.preventDefault();
     event.stopPropagation(); // évite que les raccourcis de main.js se déclenchent
-
-    // Backspace ou Suppr efface le champ
-    if (event.key === 'Backspace' || event.key === 'Delete') {
-      keysInput.value = '';
-      return;
-    }
 
     const modifiers = [];
     if (event.ctrlKey) modifiers.push('Ctrl');
     if (event.altKey) modifiers.push('Alt');
     if (event.shiftKey) modifiers.push('Maj');
     if (event.metaKey) modifiers.push('Win');
-
-    // Une touche seule (Ctrl, Maj...) ne forme pas encore une combinaison
-    if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
-      keysInput.value = modifiers.join(' + ');
-      return;
-    }
 
     const key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
     keysInput.value = [...modifiers, key].join(' + ');

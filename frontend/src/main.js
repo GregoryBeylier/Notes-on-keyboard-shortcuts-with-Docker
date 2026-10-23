@@ -57,6 +57,11 @@ async function route() {
       const shortcut = await api(`/${encodeURIComponent(decodeURIComponent(path.split('/')[2]))}`);
       if (current !== navigation) return;
       showShortcut(shortcut);
+    } else if (/^\/raccourci\/[^/]+\/modifier$/.test(path)) {
+      const slug = decodeURIComponent(path.split('/')[2]);
+      const shortcut = await api(`/${encodeURIComponent(slug)}`);
+      if (current !== navigation) return;
+      showForm(app, shortcut);
     } else {
       throw new Error('Cette page n’existe pas.');
     }
@@ -66,6 +71,32 @@ async function route() {
   }
   app.focus();
 }
+
+document.addEventListener('keydown', (ev) => {
+  if (!(ev.ctrlKey || ev.metaKey)) return;
+  const key = ev.key.toLowerCase();
+
+  // Ctrl+K : nouvelle fiche
+  if (key === 'k') {
+    ev.preventDefault();
+    location.hash = '#/nouveau';
+  }
+
+  // Ctrl+S : enregistrer le formulaire affiché
+  if (key === 's') {
+    const form = document.querySelector('#shortcut-form');
+    if (form) {
+      ev.preventDefault();
+      if (!form.querySelector('button').disabled) form.requestSubmit();
+    }
+  }
+
+  // Ctrl+E : modifier la fiche affichée
+  if (key === 'e' && /^#\/raccourci\/[^/]+$/.test(location.hash)) {
+    ev.preventDefault();
+    location.hash = `${location.hash}/modifier`;
+  }
+});
 
 window.addEventListener('hashchange', route);
 route();
